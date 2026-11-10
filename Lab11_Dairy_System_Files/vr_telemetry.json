@@ -1,0 +1,45 @@
+{
+    "timestamp": "2026-10-15T10:45:00",
+    "product": "Pasteurized_Milk_2.5",
+    "equipment": [
+        {
+            "id": "TANK-01",
+            "name": "Raw Milk Storage Tank",
+            "status": "working",
+            "temp_c": 4.1,
+            "alert": false
+        },
+        {
+            "id": "PASTEUR-01",
+            "name": "Pasteurizer Unit",
+            "status": "working",
+            "temp_c": 76.5,
+            "pressure_bar": 3.1,
+            "alert": false
+        },
+        {
+            "id": "COOLER-01",
+            "name": "Ice Water Cooler",
+            "status": "working",
+            "temp_c": 4.0,
+            "alert": false
+        },
+        {
+            "id": "PACK-01",
+            "name": "Pure-Pak Packaging Line",
+            "status": "working",
+            "speed_packs_min": 70,
+            "alert": false
+        }
+    ],
+    "predictions": {
+        "next_interval_electricity_kwh": 9.75,
+        "next_interval_water_l": 122.5,
+        "anomaly_threshold_kwh": 0.68
+    },
+    "recommended_schedule": {
+        "name": "Режим 4: Энергоэффективный (1 линия, 3800 л/ч)",
+        "projected_cost_kzt": 21232.6,
+        "savings_kzt": 924.0
+    }
+}

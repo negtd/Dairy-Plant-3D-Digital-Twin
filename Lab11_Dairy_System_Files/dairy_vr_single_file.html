@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Лабораторная работа №11 — Виртуальный молочный цех (3D + ML/DL)</title>
+    <!-- Библиотеки Three.js, OrbitControls и Chart.js с CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+/* Лабораторная работа №11 — Стили интеллектуальной системы управления ресурсами молочного цеха */
+:root {
+    --bg-dark: #0b1120;
+    --bg-panel: #111827;
+    --bg-card: #1e293b;
+    --border-color: #334155;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --accent-blue: #38bdf8;
+    --accent-green: #22c55e;
+    --accent-amber: #f59e0b;
+    --accent-red: #ef4444;
+    --accent-purple: #a855f7;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Верхняя шапка */
+.topbar {
+    height: 60px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 20;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.brand-badge {
+    background: linear-gradient(135deg, #0284c7, #2563eb);
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    letter-spacing: 0.5px;
+}
+
+.brand-title {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.brand-subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.topbar-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+}
+
+.dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    box-shadow: 0 0 8px var(--accent-green);
+}
+
+.dot.warning {
+    background: var(--accent-amber);
+    box-shadow: 0 0 8px var(--accent-amber);
+}
+
+.dot.danger {
+    background: var(--accent-red);
+    box-shadow: 0 0 10px var(--accent-red);
+    animation: pulse 0.8s infinite alternate;
+}
+
+@keyframes pulse {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0.4; transform: scale(1.25); }
+}
+
+.btn {
+    background: var(--bg-card);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    padding: 7px 13px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn:hover {
+    border-color: var(--accent-blue);
+    background: #26354d;
+}
+
+.btn-primary {
+    background: #0284c7;
+    border-color: #0369a1;
+}
+
+.btn-primary:hover {
+    background: #0369a1;
+}
+
+.btn-danger {
+    background: #dc2626;
+    border-color: #b91c1c;
+}
+
+/* Баннер тревоги */
+.alert-banner {
+    display: none;
+    background: linear-gradient(90deg, rgba(220,38,38,0.95), rgba(153,27,27,0.95));
+    color: #fff;
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #f87171;
+    z-index: 19;
+}
+
+.alert-banner.active {
+    display: flex;
+}
+
+/* Основная сетка */
+.workspace {
+    display: grid;
+    grid-template-columns: 1fr 450px;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* 3D Сцена */
+.viewport-container {
+    position: relative;
+    background: radial-gradient(circle at center, #1e293b 0%, #090d16 100%);
+    overflow: hidden;
+}
+
+#canvas3d {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Оверлей телеметрии поверх 3D */
+.hud-overlay {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.hud-card {
+    background: rgba(17, 24, 39, 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-width: 260px;
+    pointer-events: auto;
+}
+
+.hud-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--accent-blue);
+    margin-bottom: 6px;
+    font-weight: 700;
+}
+
+.hud-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+    font-size: 12px;
+}
+
+.hud-label {
+    color: var(--text-muted);
+}
+
+.hud-val {
+    font-weight: 600;
+    text-align: right;
+}
+
+/* Кнопки выбора камер и узлов */
+.camera-bar {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    background: rgba(17, 24, 39, 0.9);
+    backdrop-filter: blur(8px);
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+}
+
+.cam-btn {
+    background: var(--bg-card);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    padding: 6px 11px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: 0.15s;
+}
+
+.cam-btn:hover, .cam-btn.active {
+    background: #0284c7;
+    border-color: var(--accent-blue);
+}
+
+/* Правая панель управления SCADA */
+.sidebar {
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 14px;
+    gap: 14px;
+}
+
+.panel-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.panel-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+    letter-spacing: 0.5px;
+}
+
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.kpi-item {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 8px 10px;
+    border-radius: 6px;
+}
+
+.kpi-name {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.kpi-value {
+    font-size: 16px;
+    font-weight: 700;
+    margin-top: 2px;
+}
+
+.kpi-sub {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.form-row label {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+select {
+    background: #0f172a;
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.chart-wrap {
+    height: 150px;
+    position: relative;
+    margin-top: 6px;
+}
+
+/* Модальные окна */
+.modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.modal-backdrop.open {
+    display: flex;
+}
+
+.modal-window {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    max-width: 900px;
+    width: 100%;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.modal-header {
+    padding: 14px 20px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 20px;
+    font-size: 12px;
+}
+
+.data-table th, .data-table td {
+    border: 1px solid var(--border-color);
+    padding: 8px 10px;
+    text-align: left;
+}
+
+.data-table th {
+    background: #1e293b;
+    color: var(--accent-blue);
+}
+
+.qa-block {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+}
+
+.qa-q {
+    font-weight: 700;
+    color: var(--accent-blue);
+    margin-bottom: 4px;
+}
+
+</style>
+</head>
+<body>
+
+    <!-- ВЕРХНЯЯ ПАНЕЛЬ -->
+    <header class="topbar">
+        <div class="brand">
+            <span class="brand-badge">ЛАБ №11 • 3D VR + AI</span>
+            <div>
+                <div class="brand-title">Интеллектуальная система управления ресурсами молочного цеха</div>
+                <div class="brand-subtitle">Продукт: Пастеризованное молоко 2.5% | ML / LSTM Прогнозирование и 3D Цифровой двойник</div>
+            </div>
+        </div>
+        <div class="topbar-controls">
+            <div class="status-pill">
+                <span id="statusDot" class="dot"></span>
+                <span id="statusText">Режим: Штатное производство</span>
+            </div>
+            <button class="btn" data-modal="modalReport">📊 Таблицы и Отчёт</button>
+            <button class="btn" data-modal="modalQuestions">❓ Контрольные вопросы (10)</button>
+            <button class="btn btn-primary" id="btnExportJson">⬇ Скачать vr_telemetry.json</button>
+        </div>
+    </header>
+
+    <!-- БАННЕР АВАРИЙНОГО ОТКЛОНЕНИЯ -->
+    <div id="alertBanner" class="alert-banner">
+        <span>⚠️ СООБЩЕНИЕ СИСТЕМЫ: «Обнаружено отклонение потребления энергии. Требуется проверка режима работы оборудования» (Участок: PASTEUR-01, превышение порога 95% 3 интервала подряд)</span>
+        <button class="btn" onclick="document.getElementById('scenarioSelect').value='baseline'; document.getElementById('scenarioSelect').dispatchEvent(new Event('change'));">Сбросить в штатный режим</button>
+    </div>
+
+    <!-- ОСНОВНОЕ РАБОЧЕЕ ПРОСТРАНСТВО -->
+    <main class="workspace">
+        <!-- ЛЕВАЯ ЧАСТЬ: 3D ВИРТУАЛЬНЫЙ ЦЕХ -->
+        <section id="viewport3d" class="viewport-container">
+            <canvas id="canvas3d"></canvas>
+
+            <!-- Оверлей выбранного оборудования -->
+            <div class="hud-overlay">
+                <div class="hud-card">
+                    <div class="hud-title">Инспектор 3D-оборудования</div>
+                    <div style="font-weight:700; font-size:13px; margin-bottom:6px;" id="inspName">PASTEUR-01 — Участок тепловой обработки</div>
+                    <div class="hud-grid">
+                        <span class="hud-label">Состояние:</span>
+                        <span class="hud-val" id="inspStatus" style="color:#22c55e;">Работает</span>
+                        <span class="hud-label">Время (шаг 5 мин):</span>
+                        <span class="hud-val" id="hudTimestamp">10:00</span>
+                        <span class="hud-label">Загрузка линии:</span>
+                        <span class="hud-val" id="hudLoad">81%</span>
+                        <span class="hud-label">Температура пастер.:</span>
+                        <span class="hud-val" id="hudTemp">76.5 °C</span>
+                    </div>
+                    <div style="margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.08); font-size:11px; color:#94a3b8;" id="inspParams">
+                        Температура: 76.5 °C | Давление: 3.1 бар | Выдержка: 20 с
+                    </div>
+                    <div style="margin-top:4px; font-size:11px; color:#38bdf8; font-weight:600;" id="inspPred">
+                        Энергия (t+1): 9.75 кВт·ч | Вода: 122.0 л
+                    </div>
+                    <div style="margin-top:4px; font-size:11px; color:#f8fafc;" id="inspAction">
+                        Рекомендация: Контроль температурного режима пастеризации (&ge; 76 °C)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Панель переключения 3D-камер по участкам -->
+            <div class="camera-bar">
+                <button class="cam-btn" data-cam="OVERVIEW">Общий вид цеха</button>
+                <button class="cam-btn" data-cam="TANK-01">1. Танк сырья</button>
+                <button class="cam-btn active" data-cam="PASTEUR-01">2. Пастеризатор ПОУ</button>
+                <button class="cam-btn" data-cam="COOLER-01">3. Охладитель</button>
+                <button class="cam-btn" data-cam="PACK-01">4. Фасовка Pure-Pak</button>
+                <button class="cam-btn" data-cam="PANEL-01">5. Пульт оператора</button>
+            </div>
+        </section>
+
+        <!-- ПРАВАЯ ПАНЕЛЬ: ML ПРОГНОЗЫ, СЦЕНАРИИ И ОПТИМИЗАЦИЯ -->
+        <aside class="sidebar">
+            <!-- Блок 1: KPI -->
+            <div class="panel-box">
+                <div class="panel-header">
+                    <span class="panel-title">Прогноз ресурсов (интервал t+1)</span>
+                    <span style="font-size:11px; color:#94a3b8;">Шаг: 5 мин</span>
+                </div>
+                <div class="kpi-grid">
+                    <div class="kpi-item">
+                        <div class="kpi-name">Факт энергии E(t)</div>
+                        <div class="kpi-value" id="kpiActualE">9.82 кВт·ч</div>
+                        <div class="kpi-sub">Текущий замер счётчика</div>
+                    </div>
+                    <div class="kpi-item">
+                        <div class="kpi-name">Прогноз энергии Ê(t+1)</div>
+                        <div class="kpi-value" style="color:#a855f7;" id="kpiPredE">9.75 кВт·ч</div>
+                        <div class="kpi-sub">Модель ML / DL</div>
+                    </div>
+                    <div class="kpi-item">
+                        <div class="kpi-name">Прогноз воды Ŵ(t+1)</div>
+                        <div class="kpi-value" style="color:#38bdf8;" id="kpiWater">122.5 л</div>
+                        <div class="kpi-sub">Охлаждение + конвейер</div>
+                    </div>
+                    <div class="kpi-item">
+                        <div class="kpi-name">Ошибка r_t = |E - Ê|</div>
+                        <div class="kpi-value" id="kpiResidual">0.12 кВт·ч</div>
+                        <div class="kpi-sub">Порог 95%: 0.68 кВт·ч</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Блок 2: Управление сценариями и моделями -->
+            <div class="panel-box">
+                <div class="panel-header">
+                    <span class="panel-title">Экспериментальные сценарии и модели</span>
+                </div>
+                <div class="form-row">
+                    <label>Исследовательский сценарий:</label>
+                    <select id="scenarioSelect">
+                        <option value="baseline">1. Базовый (Штатное выполнение плана 20 000 л)</option>
+                        <option value="high_demand">2. Повышенный спрос (Увеличение выпуска +18%)</option>
+                        <option value="low_milk">3. Ограничение сырья (Снижение подачи молока)</option>
+                        <option value="downtime">4. Простой линии (Остановка участка на интервал)</option>
+                        <option value="anomaly">5. Избыточное потребление (+3.8 кВт·ч — Аномалия!)</option>
+                        <option value="cip">6. Санитарная мойка CIP (Щелочь/Кислота 75 °C)</option>
+                    </select>
+                </div>
+                <div class="form-row" style="margin-bottom:4px;">
+                    <label>Активная модель прогнозирования:</label>
+                    <select id="modelSelect">
+                        <option value="rf">Случайный лес (Random Forest) — Лучшая точность</option>
+                        <option value="lstm">Глубокое обучение (PyTorch LSTM, окно L=12)</option>
+                        <option value="lr">Линейная регрессия (Linear Regression)</option>
+                        <option value="base">Базовый прогноз E(t+1) = E(t)</option>
+                    </select>
+                </div>
+                <div id="modelMetricsLine" style="font-size:11px; color:#22c55e; font-weight:600;">
+                    MAE: 0.2315 кВт·ч | RMSE: 0.4820 кВт·ч | R²: 0.9785
+                </div>
+            </div>
+
+            <!-- Блок 3: Графики -->
+            <div class="panel-box">
+                <div class="panel-header">
+                    <span class="panel-title">Динамика «Факт — Прогноз» и невязка r_t</span>
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="energyChart"></canvas>
+                </div>
+                <div class="chart-wrap" style="height:125px; margin-top:10px;">
+                    <canvas id="residualChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Блок 4: Оптимизация расписания J(u) -->
+            <div class="panel-box">
+                <div class="panel-header">
+                    <span class="panel-title">Оптимизация расписания J(u) = c_E·Ê + c_W·Ŵ</span>
+                </div>
+                <div class="form-row">
+                    <label>Выбор производственного режима (план Q = 20 000 л):</label>
+                    <select id="scheduleSelect">
+                        <option value="nominal">Исходный режим (1 линия, 4200 л/ч)</option>
+                        <option value="optimal">Рекомендуемый энергоэффективный (1 линия, 3800 л/ч)</option>
+                        <option value="parallel">Распределённый (2 линии по 2500 л/ч)</option>
+                        <option value="forced">Форсированный (1 линия, 5200 л/ч)</option>
+                    </select>
+                </div>
+                <div class="kpi-grid">
+                    <div class="kpi-item">
+                        <div class="kpi-name">Затраты J(u)</div>
+                        <div class="kpi-value" style="color:#22c55e;" id="optCost">22 156.60 тг</div>
+                        <div class="kpi-sub" id="optSavings">Базовый уровень</div>
+                    </div>
+                    <div class="kpi-item">
+                        <div class="kpi-name">Удельный расход</div>
+                        <div class="kpi-value" style="font-size:13px;" id="optEPerL">0.0364 кВт·ч/л</div>
+                        <div class="kpi-sub">Вода: <span id="optWPerL">0.3590 л/л</span></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- МОДАЛЬНОЕ ОКНО 1: ТАБЛИЦЫ ОТЧЁТА -->
+    <div id="modalReport" class="modal-backdrop">
+        <div class="modal-window">
+            <div class="modal-header">
+                <strong>Итоговые таблицы отчёта по Лабораторной работе №11</strong>
+                <button class="btn close-modal">✕ Закрыть</button>
+            </div>
+            <div class="modal-body">
+                <h3>1. Таблица сравнения моделей прогнозирования электроэнергии</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Модель</th>
+                            <th>MAE, кВт·ч</th>
+                            <th>RMSE, кВт·ч</th>
+                            <th>R²</th>
+                            <th>Комментарий</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Базовый прогноз E(t+1) = E(t)</td>
+                            <td>1.1420</td>
+                            <td>1.9540</td>
+                            <td>0.8240</td>
+                            <td>Высокая ошибка при переключении производственных режимов</td>
+                        </tr>
+                        <tr>
+                            <td>Линейная регрессия</td>
+                            <td>0.4120</td>
+                            <td>0.7410</td>
+                            <td>0.9410</td>
+                            <td>Учитывает линейную зависимость от потока молока и температур</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Случайный лес (Random Forest)</strong></td>
+                            <td><strong>0.2315</strong></td>
+                            <td><strong>0.4820</strong></td>
+                            <td><strong>0.9785</strong></td>
+                            <td>Лучшая точность на нелинейных переходах «Производство — Мойка»</td>
+                        </tr>
+                        <tr>
+                            <td>LSTM (PyTorch, окно L=12 шагов / 1 час)</td>
+                            <td>0.2580</td>
+                            <td>0.5120</td>
+                            <td>0.9710</td>
+                            <td>Корректно моделирует тепловую инерцию пастеризатора</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>2. Таблица оценки управления ресурсами (План выпуска: 20 000 л молока 2.5%)</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Показатель</th>
+                            <th>Исходный режим (4200 л/ч)</th>
+                            <th>Рекомендуемый режим (3800 л/ч)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Выпуск продукции, л</td><td>20 000</td><td>20 000</td></tr>
+                        <tr><td>Потребление энергии, кВт·ч</td><td>727.20</td><td>694.20 (-4.5%)</td></tr>
+                        <tr><td>Потребление воды, л</td><td>7 180.00</td><td>7 180.00</td></tr>
+                        <tr><td>Энергия на литр продукции, кВт·ч/л</td><td>0.0364</td><td>0.0347</td></tr>
+                        <tr><td>Вода на литр продукции, л/л</td><td>0.3590</td><td>0.3590</td></tr>
+                        <tr><td>Затраты на энергию и воду, тг</td><td>22 156.60</td><td>21 232.60 (Экономия 924 тг)</td></tr>
+                        <tr><td>Выполнение санитарных и тех. ограничений</td><td>Да (T = 76.5 °C)</td><td>Да (T = 76.5 °C)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО 2: КОНТРОЛЬНЫЕ ВОПРОСЫ -->
+    <div id="modalQuestions" class="modal-backdrop">
+        <div class="modal-window">
+            <div class="modal-header">
+                <strong>Ответы на контрольные вопросы (1–10)</strong>
+                <button class="btn close-modal">✕ Закрыть</button>
+            </div>
+            <div class="modal-body">
+                <div class="qa-block">
+                    <div class="qa-q">1. Какие ресурсы учитываются при производстве выбранного молочного продукта?</div>
+                    <div>Для пастеризованного молока учитываются: молочное сырьё, электроэнергия (насосы, гомогенизатор, сепаратор, конвейер), тепловая энергия, ледяная и техническая вода (охлаждение и CIP-мойка), а также картонная упаковка.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">2. Чем прогноз потребления отличается от управления ресурсами?</div>
+                    <div>Прогноз оценивает будущий расход Ê(t+1) при заданных параметрах, а управление ресурсами выбирает вектор управляющих параметров u (скорость подачи, график запуска линий), минимизирующий целевую функцию затрат J(u) при выполнении плана.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">3. Почему временные данные разделяют хронологически?</div>
+                    <div>Случайное перемешивание нарушает временную причинно-следственную связь и вызывает утечку данных из будущего (data leakage), завышая метрики на тесте.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">4. Как возникает утечка информации при подготовке признаков?</div>
+                    <div>При настройке StandardScaler на всём датасете до разбиения train/val/test либо при включении в признаки параметров момента t+1 (например, фактического будущего выпуска продукции).</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">5. Когда глубокое обучение может уступать простой модели?</div>
+                    <div>При небольшом объёме выборки, высоком уровне случайного шума и когда зависимость определяется текущим статическим режимом работы без длинной временной памяти.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">6. Почему превышение порога ошибки не доказывает неисправность оборудования?</div>
+                    <div>Большая невязка r_t сигнализирует об отличии режима от обучающей выборки, что может быть вызвано сменой партии сырья, температурой в цехе или погрешностью датчика, а не поломкой.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">7. Какие ограничения обязательны при выборе производственного режима?</div>
+                    <div>Температура пастеризации (не ниже 76 °C), время выдержки, регламент CIP-мойки, выполнение плана выпуска Q &ge; Q_план, лимит сырья M &le; M_доступно и фонд времени оборудования.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">8. Как проверить, что снижение затрат связано с более эффективным использованием ресурсов?</div>
+                    <div>По снижению удельных затрат энергии (кВт·ч/л) и воды (л/л) при полном 100% выполнении планового объёма выпуска продукции.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">9. Какую функцию выполняет виртуальная реальность в разработанной системе?</div>
+                    <div>Обеспечивает наглядную пространственную визуализацию состояния участков цеха, цветовую индикацию аномалий и безопасную проверку рекомендуемых расписаний на цифровом двойнике.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">10. Какие дополнительные проверки необходимы перед применением прототипа на предприятии?</div>
+                    <div>Валидация на сезонных исторических архивах SCADA, проверка отказоустойчивости при обрыве связи с датчиками и технологический аудит безопасности режимов (HAZOP).</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+// Лабораторная работа №11 — Логика 3D-цеха (Three.js), ML/DL прогнозирования и оптимизации ресурсов
+
+// --- 1. ПАРАМЕТРЫ СИМУЛЯЦИИ И МОДЕЛЕЙ ---
+const ANOMALY_THRESHOLD = 0.68; // 95-й процентиль ошибки на валидации (кВт·ч)
+const TARIFF_E = 28.0;          // тг / кВт·ч
+const TARIFF_W = 0.25;          // тг / л
+
+const MODELS = {
+    rf:   { name: "Случайный лес (Random Forest)", mae: 0.2315, rmse: 0.4820, r2: 0.9785, noise: 0.16 },
+    lstm: { name: "Глубокое обучение (PyTorch LSTM, L=12)", mae: 0.2580, rmse: 0.5120, r2: 0.9710, noise: 0.19 },
+    lr:   { name: "Линейная регрессия", mae: 0.4120, rmse: 0.7410, r2: 0.9410, noise: 0.32 },
+    base: { name: "Базовый прогноз E(t+1) = E(t)", mae: 1.1420, rmse: 1.9540, r2: 0.8240, noise: 0.55 }
+};
+
+const SCHEDULES = {
+    nominal: {
+        name: "Режим 1: Исходный (1 линия, 4200 л/ч)",
+        flow: 4200, lines: 1, hours: 4.8,
+        totalE: 727.20, totalW: 7180.0, ePerL: 0.0364, wPerL: 0.3590, cost: 22156.60
+    },
+    optimal: {
+        name: "Режим 4: Рекомендуемый (1 линия, 3800 л/ч)",
+        flow: 3800, lines: 1, hours: 5.3,
+        totalE: 694.20, totalW: 7180.0, ePerL: 0.0347, wPerL: 0.3590, cost: 21232.60
+    },
+    parallel: {
+        name: "Режим 3: Две линии (2 x 2500 л/ч)",
+        flow: 5000, lines: 2, hours: 4.0,
+        totalE: 752.40, totalW: 7360.0, ePerL: 0.0376, wPerL: 0.3680, cost: 22907.20
+    },
+    forced: {
+        name: "Режим 2: Форсированный (1 линия, 5200 л/ч)",
+        flow: 5200, lines: 1, hours: 3.9,
+        totalE: 768.10, totalW: 7210.0, ePerL: 0.0384, wPerL: 0.3605, cost: 23309.30
+    }
+};
+
+const EQUIPMENT_INFO = {
+    "TANK-01": {
+        id: "TANK-01",
+        name: "Резервуар сырого молока",
+        status: "Работает",
+        params: "Объём: 14 200 л | Температура: 4.1 °C",
+        action: "Штатное охлаждение и перемешивание сырья"
+    },
+    "PASTEUR-01": {
+        id: "PASTEUR-01",
+        name: "Участок тепловой обработки (ПОУ)",
+        status: "Работает",
+        params: "Температура: 76.5 °C | Давление: 3.1 бар | Выдержка: 20 с",
+        action: "Контроль температурного режима пастеризации (>= 76 °C)"
+    },
+    "COOLER-01": {
+        id: "COOLER-01",
+        name: "Секция ледяного охлаждения",
+        status: "Работает",
+        params: "Температура выхода: 4.0 °C | Поток ледяной воды: 1 450 л/ч",
+        action: "Рекуперация тепла в норме"
+    },
+    "PACK-01": {
+        id: "PACK-01",
+        name: "Фасовочная линия Pure-Pak",
+        status: "Работает",
+        params: "Скорость: 70 пак/мин | Выпуск смены: 19 850 л",
+        action: "Синхронизация подачи с буферным танком"
+    },
+    "PANEL-01": {
+        id: "PANEL-01",
+        name: "Центральный пульт оператора АСУ ТП",
+        status: "Онлайн",
+        params: "Канал телеметрии: JSON / REST API | Шаг: 5 мин",
+        action: "Мониторинг невязки r_t и управление расписанием"
+    }
+};
+
+let state = {
+    scenario: "baseline",
+    modelKey: "rf",
+    scheduleKey: "nominal",
+    selectedNode: "PASTEUR-01",
+    stepCount: 0,
+    anomalyStreak: 0,
+    simTime: new Date("2026-10-15T10:00:00"),
+    historyLabels: [],
+    historyActualE: [],
+    historyPredE: [],
+    historyResiduals: [],
+    lastActualE: 9.8,
+    lastPredE: 9.75,
+    lastWater: 122.0
+};
+
+// --- 2. ИНИЦИАЛИЗАЦИЯ 3D СЦЕНЫ (THREE.JS) ---
+let scene, camera, renderer, controls;
+let equipmentMeshes = {};
+let beaconMeshes = {};
+let milkPacks = [];
+let flowParticles = [];
+let agitatorBlade;
+
+function init3D() {
+    const container = document.getElementById("viewport3d");
+    const canvas = document.getElementById("canvas3d");
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b1120);
+    scene.fog = new THREE.FogExp2(0x0b1120, 0.018);
+
+    camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 200);
+    camera.position.set(16, 13, 20);
+
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.target.set(0, 2, 0);
+
+    // Освещение
+    const ambient = new THREE.AmbientLight(0xffffff, 0.65);
+    scene.add(ambient);
+
+    const dirLight = new THREE.DirectionalLight(0xe0f2fe, 0.9);
+    dirLight.position.set(15, 25, 15);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    // Пол и координатная сетка цеха
+    const floorGeo = new THREE.PlaneGeometry(42, 26);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.85, metalness: 0.1 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const grid = new THREE.GridHelper(42, 42, 0x1e3a8a, 0x1e293b);
+    grid.position.y = 0.01;
+    scene.add(grid);
+
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.75, roughness: 0.25 });
+    const blueMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.5, roughness: 0.4 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.6, roughness: 0.5 });
+
+    // 1. TANK-01: Резервуар сырого молока
+    const tankGroup = new THREE.Group();
+    tankGroup.position.set(-11, 0, 0);
+    const tankBody = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 6.2, 32), steelMat.clone());
+    tankBody.position.y = 3.6;
+    tankBody.castShadow = true;
+    tankGroup.add(tankBody);
+
+    const tankTop = new THREE.Mesh(new THREE.ConeGeometry(2.2, 1.2, 32), steelMat);
+    tankTop.position.y = 7.3;
+    tankGroup.add(tankTop);
+
+    agitatorBlade = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.2, 0.4), blueMat);
+    agitatorBlade.position.y = 7.9;
+    tankGroup.add(agitatorBlade);
+
+    scene.add(tankGroup);
+    equipmentMeshes["TANK-01"] = tankBody;
+    beaconMeshes["TANK-01"] = createBeacon(tankGroup, 0, 8.6, 0);
+
+    // 2. PASTEUR-01: Пластинчатая ПОУ и гомогенизатор
+    const pasteurGroup = new THREE.Group();
+    pasteurGroup.position.set(-3.5, 0, 0);
+    const pouBase = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.5, 2.4), darkMat);
+    pouBase.position.y = 0.25;
+    pasteurGroup.add(pouBase);
+
+    const pouCore = new THREE.Mesh(new THREE.BoxGeometry(2.8, 3.4, 1.8), steelMat.clone());
+    pouCore.position.y = 2.2;
+    pouCore.castShadow = true;
+    pasteurGroup.add(pouCore);
+
+    // Трубчатый выдерживатель
+    const holderCoil = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.14, 16, 32), blueMat);
+    holderCoil.position.set(0, 2.5, 1.05);
+    pasteurGroup.add(holderCoil);
+
+    scene.add(pasteurGroup);
+    equipmentMeshes["PASTEUR-01"] = pouCore;
+    beaconMeshes["PASTEUR-01"] = createBeacon(pasteurGroup, 0, 4.5, 0);
+
+    // 3. COOLER-01: Охладитель
+    const coolerGroup = new THREE.Group();
+    coolerGroup.position.set(3.2, 0, 0);
+    const coolerMesh = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 4.2, 24), blueMat.clone());
+    coolerMesh.position.y = 2.3;
+    coolerMesh.castShadow = true;
+    coolerGroup.add(coolerMesh);
+
+    scene.add(coolerGroup);
+    equipmentMeshes["COOLER-01"] = coolerMesh;
+    beaconMeshes["COOLER-01"] = createBeacon(coolerGroup, 0, 5.0, 0);
+
+    // 4. PACK-01: Линия фасовки Pure-Pak и конвейер
+    const packGroup = new THREE.Group();
+    packGroup.position.set(10.0, 0, 0);
+    const fillerTower = new THREE.Mesh(new THREE.BoxGeometry(2.6, 4.0, 2.4), steelMat.clone());
+    fillerTower.position.set(-1.2, 2.0, 0);
+    fillerTower.castShadow = true;
+    packGroup.add(fillerTower);
+
+    const conveyorBelt = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.35, 1.2), darkMat);
+    conveyorBelt.position.set(1.5, 1.1, 0);
+    packGroup.add(conveyorBelt);
+
+    // Пакеты молока на конвейере
+    const packMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.3 });
+    for (let i = 0; i < 6; i++) {
+        const carton = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.72, 0.38), packMat);
+        carton.position.set(8.8 + i * 1.0, 1.65, 0);
+        scene.add(carton);
+        milkPacks.push(carton);
+    }
+
+    scene.add(packGroup);
+    equipmentMeshes["PACK-01"] = fillerTower;
+    beaconMeshes["PACK-01"] = createBeacon(packGroup, -1.2, 4.6, 0);
+
+    // 5. PANEL-01: Пульт оператора
+    const panelGroup = new THREE.Group();
+    panelGroup.position.set(0, 0, 6.2);
+    const desk = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.3, 1.2), darkMat);
+    desk.position.y = 0.65;
+    panelGroup.add(desk);
+
+    const screen = new THREE.Mesh(
+        new THREE.BoxGeometry(2.6, 1.4, 0.15),
+        new THREE.MeshBasicMaterial({ color: 0x0284c7 })
+    );
+    screen.position.set(0, 1.85, -0.2);
+    screen.rotation.x = -0.25;
+    panelGroup.add(screen);
+
+    scene.add(panelGroup);
+    equipmentMeshes["PANEL-01"] = screen;
+    beaconMeshes["PANEL-01"] = createBeacon(panelGroup, 0, 3.1, 0);
+
+    // Трубопроводы и частицы потока молока
+    createPipelines();
+
+    // Клик мышью по 3D-объектам
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    renderer.domElement.addEventListener("pointerdown", (e) => {
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        const entries = Object.entries(equipmentMeshes);
+        for (const [id, mesh] of entries) {
+            const intersects = raycaster.intersectObject(mesh, true);
+            if (intersects.length > 0) {
+                focusEquipment(id);
+                break;
+            }
+        }
+    });
+
+    window.addEventListener("resize", () => {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+    animate3D();
+}
+
+function createBeacon(parent, x, y, z) {
+    const mat = new THREE.MeshBasicMaterial({ color: 0x22c55e });
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 16), mat);
+    sphere.position.set(x, y, z);
+    parent.add(sphere);
+    return sphere;
+}
+
+function createPipelines() {
+    const pipeMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.8, roughness: 0.2 });
+    const pipeGeo = new THREE.CylinderGeometry(0.14, 0.14, 19.5, 16);
+    const mainPipe = new THREE.Mesh(pipeGeo, pipeMat);
+    mainPipe.rotation.z = Math.PI / 2;
+    mainPipe.position.set(-1.2, 2.8, 0);
+    scene.add(mainPipe);
+
+    const pMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    for (let i = 0; i < 18; i++) {
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 10), pMat);
+        dot.position.set(-11 + i * 1.15, 2.8, 0);
+        scene.add(dot);
+        flowParticles.push(dot);
+    }
+}
+
+function animate3D() {
+    requestAnimationFrame(animate3D);
+    const isStopped = (state.scenario === "downtime");
+
+    if (!isStopped && agitatorBlade) {
+        agitatorBlade.rotation.y += 0.06;
+    }
+
+    // Движение пакетов и частиц потока
+    if (!isStopped && state.scenario !== "cip") {
+        milkPacks.forEach((p) => {
+            p.position.x += 0.035;
+            if (p.position.x > 14.8) p.position.x = 8.8;
+        });
+    }
+
+    if (!isStopped) {
+        flowParticles.forEach((pt) => {
+            pt.position.x += 0.06;
+            if (pt.position.x > 9.0) pt.position.x = -11.0;
+        });
+    }
+
+    // Пульсация аварийного маяка на пастеризаторе
+    const pasteurBeacon = beaconMeshes["PASTEUR-01"];
+    if (pasteurBeacon) {
+        if (state.anomalyStreak >= 3) {
+            const pulse = (Math.sin(Date.now() * 0.01) + 1) * 0.5;
+            pasteurBeacon.material.color.setHex(pulse > 0.5 ? 0xef4444 : 0x7f1d1d);
+            equipmentMeshes["PASTEUR-01"].material.color.setHex(pulse > 0.5 ? 0xef4444 : 0xcbd5e1);
+        } else if (state.scenario === "cip") {
+            pasteurBeacon.material.color.setHex(0xf59e0b);
+            equipmentMeshes["PASTEUR-01"].material.color.setHex(0xcbd5e1);
+        } else {
+            pasteurBeacon.material.color.setHex(0x22c55e);
+            equipmentMeshes["PASTEUR-01"].material.color.setHex(0xcbd5e1);
+        }
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+function focusEquipment(id) {
+    state.selectedNode = id;
+    document.querySelectorAll(".cam-btn").forEach((b) => b.classList.remove("active"));
+    const activeBtn = document.querySelector(`[data-cam="${id}"]`);
+    if (activeBtn) activeBtn.classList.add("active");
+
+    const targets = {
+        "OVERVIEW":   { pos: [16, 13, 20], look: [0, 2, 0] },
+        "TANK-01":    { pos: [-11, 7, 11], look: [-11, 3.5, 0] },
+        "PASTEUR-01": { pos: [-3.5, 6, 9], look: [-3.5, 2.2, 0] },
+        "COOLER-01":  { pos: [3.2, 6, 9],  look: [3.2, 2.2, 0] },
+        "PACK-01":    { pos: [10.5, 6, 9], look: [10.5, 2.0, 0] },
+        "PANEL-01":   { pos: [0, 4.5, 12], look: [0, 1.5, 6.2] }
+    };
+
+    const t = targets[id] || targets["OVERVIEW"];
+    camera.position.set(...t.pos);
+    controls.target.set(...t.look);
+
+    updateInspectorHUD();
+}
+
+// --- 3. ГРАФИКИ TELEMETRY (CHART.JS) ---
+let energyChart, residualChart;
+
+function initCharts() {
+    const ctx1 = document.getElementById("energyChart").getContext("2d");
+    energyChart = new Chart(ctx1, {
+        type: "line",
+        data: {
+            labels: state.historyLabels,
+            datasets: [
+                {
+                    label: "Факт E_t (кВт·ч)",
+                    data: state.historyActualE,
+                    borderColor: "#38bdf8",
+                    backgroundColor: "rgba(56, 189, 248, 0.1)",
+                    borderWidth: 2,
+                    tension: 0.25,
+                    pointRadius: 2
+                },
+                {
+                    label: "Прогноз Ê_{t+1} (кВт·ч)",
+                    data: state.historyPredE,
+                    borderColor: "#a855f7",
+                    borderDash: [4, 4],
+                    borderWidth: 2,
+                    tension: 0.25,
+                    pointRadius: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: { legend: { labels: { color: "#cbd5e1", font: { size: 10 } } } },
+            scales: {
+                x: { ticks: { color: "#64748b", font: { size: 9 } }, grid: { color: "rgba(255,255,255,0.04)" } },
+                y: { ticks: { color: "#64748b", font: { size: 9 } }, grid: { color: "rgba(255,255,255,0.06)" } }
+            }
+        }
+    });
+
+    const ctx2 = document.getElementById("residualChart").getContext("2d");
+    residualChart = new Chart(ctx2, {
+        type: "bar",
+        data: {
+            labels: state.historyLabels,
+            datasets: [
+                {
+                    label: "Ошибка r_t = |E_t - Ê_t|",
+                    data: state.historyResiduals,
+                    backgroundColor: []
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+                legend: { labels: { color: "#cbd5e1", font: { size: 10 } } },
+                subtitle: {
+                    display: true,
+                    text: "Порог 95-го процентиля: 0.68 кВт·ч",
+                    color: "#f59e0b",
+                    font: { size: 10 }
+                }
+            },
+            scales: {
+                x: { ticks: { color: "#64748b", font: { size: 9 } }, grid: { display: false } },
+                y: { beginAtZero: true, suggestedMax: 1.5, ticks: { color: "#64748b", font: { size: 9 } } }
+            }
+        }
+    });
+}
+
+// --- 4. ШАГ СИМУЛЯЦИИ ТЕХПРОЦЕССА И МОДЕЛЕЙ ---
+function stepSimulation() {
+    state.stepCount++;
+    state.simTime = new Date(state.simTime.getTime() + 5 * 60000); // +5 минут
+    const timeStr = state.simTime.toTimeString().slice(0, 5);
+
+    const sched = SCHEDULES[state.scheduleKey];
+    const model = MODELS[state.modelKey];
+
+    let baseFlow = sched.flow;
+    let processTemp = 76.5 + (Math.random() - 0.5) * 0.3;
+    let loadPct = Math.round((baseFlow / 5200) * 100);
+
+    // Учёт активного сценария
+    if (state.scenario === "high_demand") {
+        baseFlow = Math.min(5400, baseFlow * 1.18);
+        loadPct = 96;
+    } else if (state.scenario === "low_milk") {
+        baseFlow = 3300;
+        loadPct = 64;
+    } else if (state.scenario === "downtime") {
+        baseFlow = 0;
+        loadPct = 5;
+        processTemp = 22.0;
+    } else if (state.scenario === "cip") {
+        baseFlow = 0;
+        loadPct = 30;
+        processTemp = 75.0;
+    }
+
+    // Ожидаемое потребление энергии по физической модели (за 5 мин интервал)
+    const nominalKw = (baseFlow > 0)
+        ? (45.0 + 0.015 * baseFlow + 0.6 * (processTemp - 4.0))
+        : (state.scenario === "cip" ? 55.0 : 8.0);
+
+    const expectedE = nominalKw * (5 / 60);
+    const predE = Math.max(0.2, expectedE + (Math.random() - 0.5) * model.noise);
+
+    // Фактическое потребление (при сценарии аномалии добавляется скачок +3.8 кВт·ч)
+    let actualE = expectedE + (Math.random() - 0.5) * 0.22;
+    if (state.scenario === "anomaly") {
+        actualE += 3.8;
+    }
+
+    const waterStep = (state.scenario === "cip")
+        ? 250.0 + (Math.random() - 0.5) * 8.0
+        : (baseFlow * (5 / 60) * 0.35);
+
+    const residual = Math.abs(actualE - predE);
+
+    if (residual > ANOMALY_THRESHOLD) {
+        state.anomalyStreak++;
+    } else {
+        state.anomalyStreak = 0;
+    }
+
+    state.lastActualE = actualE;
+    state.lastPredE = predE;
+    state.lastWater = waterStep;
+
+    // Обновление массивов графика (окно 18 точек)
+    state.historyLabels.push(timeStr);
+    state.historyActualE.push( Number(actualE.toFixed(2)) );
+    state.historyPredE.push( Number(predE.toFixed(2)) );
+    state.historyResiduals.push( Number(residual.toFixed(2)) );
+
+    if (state.historyLabels.length > 18) {
+        state.historyLabels.shift();
+        state.historyActualE.shift();
+        state.historyPredE.shift();
+        state.historyResiduals.shift();
+    }
+
+    // Цвета столбцов ошибки
+    residualChart.data.datasets[0].backgroundColor = state.historyResiduals.map((val) =>
+        val > ANOMALY_THRESHOLD ? "#ef4444" : "#22c55e"
+    );
+
+    energyChart.update();
+    residualChart.update();
+
+    // Обновление UI карточек
+    document.getElementById("kpiActualE").textContent = `${actualE.toFixed(2)} кВт·ч`;
+    document.getElementById("kpiPredE").textContent = `${predE.toFixed(2)} кВт·ч`;
+    document.getElementById("kpiWater").textContent = `${waterStep.toFixed(1)} л`;
+    document.getElementById("kpiResidual").textContent = `${residual.toFixed(2)} кВт·ч`;
+    document.getElementById("hudTimestamp").textContent = timeStr;
+    document.getElementById("hudLoad").textContent = `${loadPct}%`;
+    document.getElementById("hudTemp").textContent = `${processTemp.toFixed(1)} °C`;
+
+    // Проверка условия тревоги (несколько интервалов подряд)
+    const banner = document.getElementById("alertBanner");
+    const topDot = document.getElementById("statusDot");
+    const topLabel = document.getElementById("statusText");
+
+    if (state.anomalyStreak >= 3) {
+        banner.classList.add("active");
+        topDot.className = "dot danger";
+        topLabel.textContent = "ОТКЛОНЕНИЕ ЭНЕРГИИ";
+    } else if (state.scenario === "cip") {
+        banner.classList.remove("active");
+        topDot.className = "dot warning";
+        topLabel.textContent = "Режим: Мойка CIP";
+    } else {
+        banner.classList.remove("active");
+        topDot.className = "dot";
+        topLabel.textContent = "Режим: Штатное производство";
+    }
+
+    updateInspectorHUD();
+}
+
+function updateInspectorHUD() {
+    const info = EQUIPMENT_INFO[state.selectedNode] || EQUIPMENT_INFO["PASTEUR-01"];
+    document.getElementById("inspName").textContent = `${info.id} — ${info.name}`;
+    document.getElementById("inspParams").textContent = info.params;
+    document.getElementById("inspPred").textContent =
+        `Энергия (t+1): ${state.lastPredE.toFixed(2)} кВт·ч | Вода: ${state.lastWater.toFixed(1)} л`;
+
+    if (state.anomalyStreak >= 3 && state.selectedNode === "PASTEUR-01") {
+        document.getElementById("inspStatus").textContent = "ПРЕДУПРЕЖДЕНИЕ (Аномалия расхода)";
+        document.getElementById("inspStatus").style.color = "#ef4444";
+        document.getElementById("inspAction").textContent =
+            "Обнаружено отклонение потребления энергии. Требуется проверка режима работы оборудования";
+    } else {
+        document.getElementById("inspStatus").textContent = info.status;
+        document.getElementById("inspStatus").style.color = "#22c55e";
+        document.getElementById("inspAction").textContent = info.action;
+    }
+}
+
+function updateScheduleMetrics() {
+    const s = SCHEDULES[state.scheduleKey];
+    document.getElementById("optCost").textContent = `${s.cost.toLocaleString("ru-RU")} тг`;
+    document.getElementById("optEPerL").textContent = `${s.ePerL} кВт·ч/л`;
+    document.getElementById("optWPerL").textContent = `${s.wPerL} л/л`;
+    const savings = (SCHEDULES.nominal.cost - s.cost).toFixed(0);
+    document.getElementById("optSavings").textContent =
+        savings > 0 ? `Экономия: +${savings} тг на партии` : `Перерасход относительно оптимума`;
+}
+
+// --- 5. ЭКСПОРТ VR_TELEMETRY.JSON ---
+function downloadTelemetryJSON() {
+    const payload = {
+        timestamp: new Date().toISOString(),
+        active_scenario: state.scenario,
+        selected_ml_model: MODELS[state.modelKey].name,
+        equipment: Object.values(EQUIPMENT_INFO).map((eq) => ({
+            id: eq.id,
+            name: eq.name,
+            status: (state.anomalyStreak >= 3 && eq.id === "PASTEUR-01") ? "warning" : "working",
+            alert: (state.anomalyStreak >= 3 && eq.id === "PASTEUR-01"),
+            alert_message: (state.anomalyStreak >= 3 && eq.id === "PASTEUR-01")
+                ? "Обнаружено отклонение потребления энергии. Требуется проверка режима работы оборудования"
+                : "OK"
+        })),
+        predictions: {
+            next_interval_electricity_kwh: Number(state.lastPredE.toFixed(2)),
+            next_interval_water_l: Number(state.lastWater.toFixed(1)),
+            anomaly_threshold_kwh: ANOMALY_THRESHOLD
+        },
+        optimization: SCHEDULES[state.scheduleKey]
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 4)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "vr_telemetry.json";
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// --- 6. ПРИВЯЗКА СОБЫТИЙ ИНТЕРФЕЙСА ---
+window.addEventListener("DOMContentLoaded", () => {
+    init3D();
+    initCharts();
+    updateScheduleMetrics();
+
+    // Стартовая генерация 10 точек истории
+    for (let i = 0; i < 10; i++) stepSimulation();
+
+    setInterval(stepSimulation, 2200);
+
+    document.getElementById("scenarioSelect").addEventListener("change", (e) => {
+        state.scenario = e.target.value;
+        if (state.scenario === "anomaly") {
+            focusEquipment("PASTEUR-01");
+        }
+        stepSimulation();
+    });
+
+    document.getElementById("modelSelect").addEventListener("change", (e) => {
+        state.modelKey = e.target.value;
+        const m = MODELS[state.modelKey];
+        document.getElementById("modelMetricsLine").textContent =
+            `MAE: ${m.mae} кВт·ч | RMSE: ${m.rmse} кВт·ч | R²: ${m.r2}`;
+        stepSimulation();
+    });
+
+    document.getElementById("scheduleSelect").addEventListener("change", (e) => {
+        state.scheduleKey = e.target.value;
+        updateScheduleMetrics();
+        stepSimulation();
+    });
+
+    document.querySelectorAll(".cam-btn").forEach((btn) => {
+        btn.addEventListener("click", () => focusEquipment(btn.dataset.cam));
+    });
+
+    document.getElementById("btnExportJson").addEventListener("click", downloadTelemetryJSON);
+
+    // Модальные окна
+    document.querySelectorAll("[data-modal]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            document.getElementById(btn.dataset.modal).classList.add("open");
+        });
+    });
+
+    document.querySelectorAll(".close-modal").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            btn.closest(".modal-backdrop").classList.remove("open");
+        });
+    });
+});
+
+</script>
+</body>
+</html>

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Лабораторная работа №11 — Виртуальный молочный цех (3D + ML/DL)</title>
+    <!-- Библиотеки Three.js, OrbitControls и Chart.js с CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ВЕРХНЯЯ ПАНЕЛЬ -->
+    <header class="topbar">
+        <div class="brand">
+            <span class="brand-badge">ЛАБ №11 • 3D VR + AI</span>
+            <div>
+                <div class="brand-title">Интеллектуальная система управления ресурсами молочного цеха</div>
+                <div class="brand-subtitle">Продукт: Пастеризованное молоко 2.5% | ML / LSTM Прогнозирование и 3D Цифровой двойник</div>
+            </div>
+        </div>
+        <div class="topbar-controls">
+            <div class="status-pill">
+                <span id="statusDot" class="dot"></span>
+                <span id="statusText">Режим: Штатное производство</span>
+            </div>
+            <button class="btn" data-modal="modalReport">📊 Таблицы и Отчёт</button>
+            <button class="btn" data-modal="modalQuestions">❓ Контрольные вопросы (10)</button>
+            <button class="btn btn-primary" id="btnExportJson">⬇ Скачать vr_telemetry.json</button>
+        </div>
+    </header>
+
+    <!-- БАННЕР АВАРИЙНОГО ОТКЛОНЕНИЯ -->
+    <div id="alertBanner" class="alert-banner">
+        <span>⚠️ СООБЩЕНИЕ СИСТЕМЫ: «Обнаружено отклонение потребления энергии. Требуется проверка режима работы оборудования» (Участок: PASTEUR-01, превышение порога 95% 3 интервала подряд)</span>
+        <button class="btn" onclick="document.getElementById('scenarioSelect').value='baseline'; document.getElementById('scenarioSelect').dispatchEvent(new Event('change'));">Сбросить в штатный режим</button>
+    </div>
+
+    <!-- ОСНОВНОЕ РАБОЧЕЕ ПРОСТРАНСТВО -->
+    <main class="workspace">
+        <!-- ЛЕВАЯ ЧАСТЬ: 3D ВИРТУАЛЬНЫЙ ЦЕХ -->
+        <section id="viewport3d" class="viewport-container">
+            <canvas id="canvas3d"></canvas>
+
+            <!-- Оверлей выбранного оборудования -->
+            <div class="hud-overlay">
+                <div class="hud-card">
+                    <div class="hud-title">Инспектор 3D-оборудования</div>
+                    <div style="font-weight:700; font-size:13px; margin-bottom:6px;" id="inspName">PASTEUR-01 — Участок тепловой обработки</div>
+                    <div class="hud-grid">
+                        <span class="hud-label">Состояние:</span>
+                        <span class="hud-val" id="inspStatus" style="color:#22c55e;">Работает</span>
+                        <span class="hud-label">Время (шаг 5 мин):</span>
+                        <span class="hud-val" id="hudTimestamp">10:00</span>
+                        <span class="hud-label">Загрузка линии:</span>
+                        <span class="hud-val" id="hudLoad">81%</span>
+                        <span class="hud-label">Температура пастер.:</span>
+                        <span class="hud-val" id="hudTemp">76.5 °C</span>
+                    </div>
+                    <div style="margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.08); font-size:11px; color:#94a3b8;" id="inspParams">
+                        Температура: 76.5 °C | Давление: 3.1 бар | Выдержка: 20 с
+                    </div>
+                    <div style="margin-top:4px; font-size:11px; color:#38bdf8; font-weight:600;" id="inspPred">
+                        Энергия (t+1): 9.75 кВт·ч | Вода: 122.0 л
+                    </div>
+                    <div style="margin-top:4px; font-size:11px; color:#f8fafc;" id="inspAction">
+                        Рекомендация: Контроль температурного режима пастеризации (&ge; 76 °C)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Панель переключения 3D-камер по участкам -->
+            <div class="camera-bar">
+                <button class="cam-btn" data-cam="OVERVIEW">Общий вид цеха</button>
+                <button class="cam-btn" data-cam="TANK-01">1. Танк сырья</button>
+                <button class="cam-btn active" data-cam="PASTEUR-01">2. Пастеризатор ПОУ</button>
+                <button class="cam-btn" data-cam="COOLER-01">3. Охладитель</button>
+                <button class="cam-btn" data-cam="PACK-01">4. Фасовка Pure-Pak</button>
+                <button class="cam-btn" data-cam="PANEL-01">5. Пульт оператора</button>
+            </div>
+        </section>
+
+        <!-- ПРАВАЯ ПАНЕЛЬ: ML ПРОГНОЗЫ, СЦЕНАРИИ И ОПТИМИЗАЦИЯ -->
+        <aside class="sidebar">
+            <!-- Блок 1: KPI -->
+            <div class="panel-box">
+                <div class="panel-header">
+                    <span class="panel-title">Прогноз ресурсов (интервал t+1)</span>
+                    <span style="font-size:11px; color:#94a3b8;">Шаг: 5 мин</span>
+                </div>
+                <div class="kpi-grid">
+                    <div class="kpi-item">
+                        <div class="kpi-name">Факт энергии E(t)</div>
+                        <div class="kpi-value" id="kpiActualE">9.82 кВт·ч</div>
+                        <div class="kpi-sub">Текущий замер счётчика</div>
+                    </div>
+                    <div class="kpi-item">
+                        <div class="kpi-name">Прогноз энергии Ê(t+1)</div>
+                        <div class="kpi-value" style="color:#a855f7;" id="kpiPredE">9.75 кВт·ч</div>
+                        <div class="kpi-sub">Модель ML / DL</div>
+                    </div>
+                    <div class="kpi-item">
+                        <div class="kpi-name">Прогноз воды Ŵ(t+1)</div>
+                        <div class="kpi-value" style="color:#38bdf8;" id="kpiWater">122.5 л</div>
+                        <div class="kpi-sub">Охлаждение + конвейер</div>
+                    </div>
+                    <div class="kpi-item">
+                        <div class="kpi-name">Ошибка r_t = |E - Ê|</div>
+                        <div class="kpi-value" id="kpiResidual">0.12 кВт·ч</div>
+                        <div class="kpi-sub">Порог 95%: 0.68 кВт·ч</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Блок 2: Управление сценариями и моделями -->
+            <div class="panel-box">
+                <div class="panel-header">
+                    <span class="panel-title">Экспериментальные сценарии и модели</span>
+                </div>
+                <div class="form-row">
+                    <label>Исследовательский сценарий:</label>
+                    <select id="scenarioSelect">
+                        <option value="baseline">1. Базовый (Штатное выполнение плана 20 000 л)</option>
+                        <option value="high_demand">2. Повышенный спрос (Увеличение выпуска +18%)</option>
+                        <option value="low_milk">3. Ограничение сырья (Снижение подачи молока)</option>
+                        <option value="downtime">4. Простой линии (Остановка участка на интервал)</option>
+                        <option value="anomaly">5. Избыточное потребление (+3.8 кВт·ч — Аномалия!)</option>
+                        <option value="cip">6. Санитарная мойка CIP (Щелочь/Кислота 75 °C)</option>
+                    </select>
+                </div>
+                <div class="form-row" style="margin-bottom:4px;">
+                    <label>Активная модель прогнозирования:</label>
+                    <select id="modelSelect">
+                        <option value="rf">Случайный лес (Random Forest) — Лучшая точность</option>
+                        <option value="lstm">Глубокое обучение (PyTorch LSTM, окно L=12)</option>
+                        <option value="lr">Линейная регрессия (Linear Regression)</option>
+                        <option value="base">Базовый прогноз E(t+1) = E(t)</option>
+                    </select>
+                </div>
+                <div id="modelMetricsLine" style="font-size:11px; color:#22c55e; font-weight:600;">
+                    MAE: 0.2315 кВт·ч | RMSE: 0.4820 кВт·ч | R²: 0.9785
+                </div>
+            </div>
+
+            <!-- Блок 3: Графики -->
+            <div class="panel-box">
+                <div class="panel-header">
+                    <span class="panel-title">Динамика «Факт — Прогноз» и невязка r_t</span>
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="energyChart"></canvas>
+                </div>
+                <div class="chart-wrap" style="height:125px; margin-top:10px;">
+                    <canvas id="residualChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Блок 4: Оптимизация расписания J(u) -->
+            <div class="panel-box">
+                <div class="panel-header">
+                    <span class="panel-title">Оптимизация расписания J(u) = c_E·Ê + c_W·Ŵ</span>
+                </div>
+                <div class="form-row">
+                    <label>Выбор производственного режима (план Q = 20 000 л):</label>
+                    <select id="scheduleSelect">
+                        <option value="nominal">Исходный режим (1 линия, 4200 л/ч)</option>
+                        <option value="optimal">Рекомендуемый энергоэффективный (1 линия, 3800 л/ч)</option>
+                        <option value="parallel">Распределённый (2 линии по 2500 л/ч)</option>
+                        <option value="forced">Форсированный (1 линия, 5200 л/ч)</option>
+                    </select>
+                </div>
+                <div class="kpi-grid">
+                    <div class="kpi-item">
+                        <div class="kpi-name">Затраты J(u)</div>
+                        <div class="kpi-value" style="color:#22c55e;" id="optCost">22 156.60 тг</div>
+                        <div class="kpi-sub" id="optSavings">Базовый уровень</div>
+                    </div>
+                    <div class="kpi-item">
+                        <div class="kpi-name">Удельный расход</div>
+                        <div class="kpi-value" style="font-size:13px;" id="optEPerL">0.0364 кВт·ч/л</div>
+                        <div class="kpi-sub">Вода: <span id="optWPerL">0.3590 л/л</span></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- МОДАЛЬНОЕ ОКНО 1: ТАБЛИЦЫ ОТЧЁТА -->
+    <div id="modalReport" class="modal-backdrop">
+        <div class="modal-window">
+            <div class="modal-header">
+                <strong>Итоговые таблицы отчёта по Лабораторной работе №11</strong>
+                <button class="btn close-modal">✕ Закрыть</button>
+            </div>
+            <div class="modal-body">
+                <h3>1. Таблица сравнения моделей прогнозирования электроэнергии</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Модель</th>
+                            <th>MAE, кВт·ч</th>
+                            <th>RMSE, кВт·ч</th>
+                            <th>R²</th>
+                            <th>Комментарий</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Базовый прогноз E(t+1) = E(t)</td>
+                            <td>1.1420</td>
+                            <td>1.9540</td>
+                            <td>0.8240</td>
+                            <td>Высокая ошибка при переключении производственных режимов</td>
+                        </tr>
+                        <tr>
+                            <td>Линейная регрессия</td>
+                            <td>0.4120</td>
+                            <td>0.7410</td>
+                            <td>0.9410</td>
+                            <td>Учитывает линейную зависимость от потока молока и температур</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Случайный лес (Random Forest)</strong></td>
+                            <td><strong>0.2315</strong></td>
+                            <td><strong>0.4820</strong></td>
+                            <td><strong>0.9785</strong></td>
+                            <td>Лучшая точность на нелинейных переходах «Производство — Мойка»</td>
+                        </tr>
+                        <tr>
+                            <td>LSTM (PyTorch, окно L=12 шагов / 1 час)</td>
+                            <td>0.2580</td>
+                            <td>0.5120</td>
+                            <td>0.9710</td>
+                            <td>Корректно моделирует тепловую инерцию пастеризатора</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>2. Таблица оценки управления ресурсами (План выпуска: 20 000 л молока 2.5%)</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Показатель</th>
+                            <th>Исходный режим (4200 л/ч)</th>
+                            <th>Рекомендуемый режим (3800 л/ч)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Выпуск продукции, л</td><td>20 000</td><td>20 000</td></tr>
+                        <tr><td>Потребление энергии, кВт·ч</td><td>727.20</td><td>694.20 (-4.5%)</td></tr>
+                        <tr><td>Потребление воды, л</td><td>7 180.00</td><td>7 180.00</td></tr>
+                        <tr><td>Энергия на литр продукции, кВт·ч/л</td><td>0.0364</td><td>0.0347</td></tr>
+                        <tr><td>Вода на литр продукции, л/л</td><td>0.3590</td><td>0.3590</td></tr>
+                        <tr><td>Затраты на энергию и воду, тг</td><td>22 156.60</td><td>21 232.60 (Экономия 924 тг)</td></tr>
+                        <tr><td>Выполнение санитарных и тех. ограничений</td><td>Да (T = 76.5 °C)</td><td>Да (T = 76.5 °C)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО 2: КОНТРОЛЬНЫЕ ВОПРОСЫ -->
+    <div id="modalQuestions" class="modal-backdrop">
+        <div class="modal-window">
+            <div class="modal-header">
+                <strong>Ответы на контрольные вопросы (1–10)</strong>
+                <button class="btn close-modal">✕ Закрыть</button>
+            </div>
+            <div class="modal-body">
+                <div class="qa-block">
+                    <div class="qa-q">1. Какие ресурсы учитываются при производстве выбранного молочного продукта?</div>
+                    <div>Для пастеризованного молока учитываются: молочное сырьё, электроэнергия (насосы, гомогенизатор, сепаратор, конвейер), тепловая энергия, ледяная и техническая вода (охлаждение и CIP-мойка), а также картонная упаковка.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">2. Чем прогноз потребления отличается от управления ресурсами?</div>
+                    <div>Прогноз оценивает будущий расход Ê(t+1) при заданных параметрах, а управление ресурсами выбирает вектор управляющих параметров u (скорость подачи, график запуска линий), минимизирующий целевую функцию затрат J(u) при выполнении плана.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">3. Почему временные данные разделяют хронологически?</div>
+                    <div>Случайное перемешивание нарушает временную причинно-следственную связь и вызывает утечку данных из будущего (data leakage), завышая метрики на тесте.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">4. Как возникает утечка информации при подготовке признаков?</div>
+                    <div>При настройке StandardScaler на всём датасете до разбиения train/val/test либо при включении в признаки параметров момента t+1 (например, фактического будущего выпуска продукции).</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">5. Когда глубокое обучение может уступать простой модели?</div>
+                    <div>При небольшом объёме выборки, высоком уровне случайного шума и когда зависимость определяется текущим статическим режимом работы без длинной временной памяти.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">6. Почему превышение порога ошибки не доказывает неисправность оборудования?</div>
+                    <div>Большая невязка r_t сигнализирует об отличии режима от обучающей выборки, что может быть вызвано сменой партии сырья, температурой в цехе или погрешностью датчика, а не поломкой.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">7. Какие ограничения обязательны при выборе производственного режима?</div>
+                    <div>Температура пастеризации (не ниже 76 °C), время выдержки, регламент CIP-мойки, выполнение плана выпуска Q &ge; Q_план, лимит сырья M &le; M_доступно и фонд времени оборудования.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">8. Как проверить, что снижение затрат связано с более эффективным использованием ресурсов?</div>
+                    <div>По снижению удельных затрат энергии (кВт·ч/л) и воды (л/л) при полном 100% выполнении планового объёма выпуска продукции.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">9. Какую функцию выполняет виртуальная реальность в разработанной системе?</div>
+                    <div>Обеспечивает наглядную пространственную визуализацию состояния участков цеха, цветовую индикацию аномалий и безопасную проверку рекомендуемых расписаний на цифровом двойнике.</div>
+                </div>
+                <div class="qa-block">
+                    <div class="qa-q">10. Какие дополнительные проверки необходимы перед применением прототипа на предприятии?</div>
+                    <div>Валидация на сезонных исторических архивах SCADA, проверка отказоустойчивости при обрыве связи с датчиками и технологический аудит безопасности режимов (HAZOP).</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
